@@ -5,7 +5,7 @@ import StringIO
 def rglob(path, pattern):
 	for root, dirnames, filenames in os.walk(path):
 		for filename in fnmatch.filter(filenames, pattern):
-			yield root + '/' + filename
+			yield f'{root}/{filename}'
 
 schemas = {}
 
@@ -37,13 +37,13 @@ class SchemaWriter(object):
 		return '_'.join(ref)
 
 	def sphinx_ref_link(self, ref):
-		return ':ref:`' + self.sphinx_ref_name(ref) + '`'
+		return f':ref:`{self.sphinx_ref_name(ref)}`'
 
 	def header(self, level, title, ref=None):
 		if ref is not None:
 			if isinstance(ref, list):
 				ref = self.sphinx_ref_name(self._sphinx_ref_prefix() + ref)
-			self.write('.. _' + ref + ':\n\n')
+			self.write(f'.. _{ref}' + ':\n\n')
 		ch = '=-~'[level - 1]
 		self.write(title + '\n')
 		self.write(ch * len(title) + '\n\n')
@@ -56,8 +56,8 @@ class SchemaWriter(object):
 			self.paragraph('**Parameters**')
 
 			for param in desc['params']:
-				pname = '**%s** ' % param['name']
-				ptype = '%s' % self.link_type(param['value'])
+				pname = f"**{param['name']}** "
+				ptype = f"{self.link_type(param['value'])}"
 				pdesc = param.get('description', '')
 				self.paragraph(pname + ', '.join([ptype + pdesc]))
 
@@ -65,7 +65,7 @@ class SchemaWriter(object):
 			self.paragraph('**Return Value**')
 
 			param = desc['returns']
-			ptype = '%s ' % self.link_type(param['value'])
+			ptype = f"{self.link_type(param['value'])} "
 			pdesc = param.get('description', '')
 			self.paragraph(', '.join([ptype + pdesc]))
 
@@ -84,22 +84,18 @@ class SchemaWriter(object):
 			link = self.sphinx_ref_name(['apireference'] + jsref.strip('/').split('/'))
 
 		txt = self.describe_type(ref)
-		if link is None:
-			return txt
-		else:
-			return ':ref:`%s <%s>`' % (txt, link)
+		return txt if link is None else f':ref:`{txt} <{link}>`'
 
 	def describe_type(self, ref):
 		if isinstance(ref, basestring):
 			return ref
 		elif 'type' in ref:
-			if ref['type'] == 'array':
-				if '$ref' in ref['items']:
-					return '[]' + self.describe_ref(ref['items']['$ref'])
-				else:
-					return '[]' + self.describe_type(ref['items'])
-			else:
+			if ref['type'] != 'array':
 				return ref['type']
+			if '$ref' in ref['items']:
+				return '[]' + self.describe_ref(ref['items']['$ref'])
+			else:
+				return '[]' + self.describe_type(ref['items'])
 		elif 'properties' in ref:
 			return 'object'
 		elif '$ref' in ref:
@@ -116,7 +112,9 @@ class SchemaWriter(object):
 class ServiceSchemaWriter(SchemaWriter):
 	def __init__(self, name):
 		self.name = name
-		super(ServiceSchemaWriter, self).__init__('http://schema.ninjablocks.com/service/' + name)
+		super(ServiceSchemaWriter, self).__init__(
+			f'http://schema.ninjablocks.com/service/{name}'
+		)
 
 	def _sphinx_ref_prefix(self):
 		return ['apireference', 'service', self.name]
@@ -129,14 +127,14 @@ class ServiceSchemaWriter(SchemaWriter):
 
 		self.header(2, 'Methods', ref=['methods'])
 
+		ret = ''
 		for method, desc in sorted(self.schema['methods'].items()):
 			params = ''
 			if 'params' in desc:
 				params = ', '.join([p['name'] for p in desc['params']])
-			ret = ''
 			#if 'returns' in desc:
 			#	ret = ' -> ' + self.describe_type(desc['returns']['value'])
-			self.header(3, method + '(' + params + ')' + ret, ref=['methods', method])
+			self.header(3, f'{method}({params}){ret}', ref=['methods', method])
 
 			self.paragraph(desc['description'])
 
@@ -153,12 +151,14 @@ class ServiceSchemaWriter(SchemaWriter):
 					t += ' ' + desc['pattern']
 				d = desc.get('description', '')
 
-				self.paragraph('*%s* %s' % (t, d))
+				self.paragraph(f'*{t}* {d}')
 
 class ModelSchemaWriter(SchemaWriter):
 	def __init__(self, name):
 		self.name = name
-		super(ModelSchemaWriter, self).__init__('http://schema.ninjablocks.com/model/' + name)
+		super(ModelSchemaWriter, self).__init__(
+			f'http://schema.ninjablocks.com/model/{name}'
+		)
 
 	def _sphinx_ref_prefix(self):
 		return ['apireference', 'model', self.name]
@@ -177,12 +177,14 @@ class ModelSchemaWriter(SchemaWriter):
 
 		if properties is not None:
 			for n,v in properties.iteritems():
-				self.paragraph('**%s** %s' % (n, self.link_type(v)))
+				self.paragraph(f'**{n}** {self.link_type(v)}')
 
 class ProtocolSchemaWriter(SchemaWriter):
 	def __init__(self, name):
 		self.name = name
-		super(ProtocolSchemaWriter, self).__init__('http://schema.ninjablocks.com/protocol/' + name)
+		super(ProtocolSchemaWriter, self).__init__(
+			f'http://schema.ninjablocks.com/protocol/{name}'
+		)
 
 	def _sphinx_ref_prefix(self):
 		return ['apireference', 'protocol', self.name]
@@ -196,14 +198,14 @@ class ProtocolSchemaWriter(SchemaWriter):
 		if 'methods' in self.schema:
 			self.header(2, 'Methods', ref=['methods'])
 
+			ret = ''
 			for method, desc in sorted(self.schema['methods'].items()):
 				params = ''
 				if 'params' in desc:
 					params = ', '.join([p['name'] for p in desc['params']])
-				ret = ''
 				#if 'returns' in desc:
 				#	ret = ' -> ' + self.describe_type(desc['returns']['value'])
-				self.header(3, method + '(' + params + ')' + ret, ref=['methods', method])
+				self.header(3, f'{method}({params}){ret}', ref=['methods', method])
 
 				self.paragraph(desc['description'])
 
@@ -227,7 +229,9 @@ class ProtocolSchemaWriter(SchemaWriter):
 class StateSchemaWriter(SchemaWriter):
 	def __init__(self, name):
 		self.name = name
-		super(StateSchemaWriter, self).__init__('http://schema.ninjablocks.com/state/' + name)
+		super(StateSchemaWriter, self).__init__(
+			f'http://schema.ninjablocks.com/state/{name}'
+		)
 
 	def _sphinx_ref_prefix(self):
 		return ['apireference', 'state', self.name]
@@ -242,7 +246,7 @@ class StateSchemaWriter(SchemaWriter):
 			for n,v in self.schema['definitions'].items():
 				self.header(2, n, ref=[n])
 				if 'type' in v:
-					self.paragraph('*%s* %s' % (self.describe_type(v['type']), v['title'], ))
+					self.paragraph(f"*{self.describe_type(v['type'])}* {v['title']}")
 				else:
 					self.paragraph(v['title'])
 				if 'description' in v: self.paragraph(v['description'])
@@ -255,19 +259,18 @@ class StateSchemaWriter(SchemaWriter):
 
 			if properties is not None:
 				for n,v in properties.iteritems():
-					self.paragraph('**%s** %s' % (n, self.link_type(v)))
+					self.paragraph(f'**{n}** {self.link_type(v)}')
 
 def write_toc(path, title, items):
-	f = open(path, 'wb')
-	f.write(title + '\n')
-	f.write('=' * len(title) + '\n\n')
-	f.write('Contents:\n\n')
-	f.write('.. toctree::\n')
-	f.write('   :maxdepth: 1\n')
-	f.write('   \n')
-	for item in items:
-		f.write('   %s\n' % item)
-	f.close()
+	with open(path, 'wb') as f:
+		f.write(title + '\n')
+		f.write('=' * len(title) + '\n\n')
+		f.write('Contents:\n\n')
+		f.write('.. toctree::\n')
+		f.write('   :maxdepth: 1\n')
+		f.write('   \n')
+		for item in items:
+			f.write('   %s\n' % item)
 
 
 SPHINX_PATH = '../developer-docs/source'
@@ -303,7 +306,7 @@ def do_iter_and_toc(slug, title, dumpfunc, exclude=[]):
 			dumpfunc(name)
 			services.append(name)
 
-	path = os.path.join(SPHINX_PATH, 'apireference/'+slug+'/index.rst')
+	path = os.path.join(SPHINX_PATH, f'apireference/{slug}/index.rst')
 	write_toc(path, title, services)
 
 do_iter_and_toc('model', 'Models', dump_model_md, exclude=[])
